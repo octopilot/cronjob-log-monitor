@@ -63,7 +63,32 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
-      - run: cargo build --release
+
+      - name: Cache Cargo and rustup
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/bin/
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            ~/.rustup/
+            target/
+          key: ${{ runner.os }}-rust-stable-cargo-test-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-rust-stable-cargo-test-
+            ${{ runner.os }}-cargo-
+
+      - name: Install mold linker
+        run: sudo apt-get update -qq && sudo apt-get install -y mold
+
+      - name: Build release binary
+        env:
+          CARGO_TARGET_DIR: ${{ github.workspace }}/target
+          CARGO_BUILD_INCREMENTAL: 1
+          RUSTFLAGS: -C link-arg=-fuse-ld=mold
+        run: cargo build --release
+
       - name: Smoke run (expect missing MONITOR_LABEL_SELECTOR)
         run: |
           set +e
@@ -100,13 +125,18 @@ jobs:
         id: images
         env:
           TTL_UUID: ${{ steps.ttl.outputs.uuid }}
+          DOCKER_BUILDKIT: 1
         run: |
           MONITOR_IMAGE="ttl.sh/${TTL_UUID}-monitor:1h"
           CRONJOB_IMAGE="ttl.sh/${TTL_UUID}-cronjob:1h"
-          docker build -t "$MONITOR_IMAGE" -f Dockerfile .
+          docker build -t "$MONITOR_IMAGE" -f Dockerfile . \
+            --build-arg CARGO_CACHE_SOURCE="$HOME/.cargo" \
+            --build-arg RUSTUP_CACHE_SOURCE="$HOME/.rustup" \
+            --build-arg TARGET_CACHE_SOURCE="${{ github.workspace }}/target"
           pack build "$CRONJOB_IMAGE" \
             --builder paketobuildpacks/builder-jammy-base \
-            --path tests/integration/cronjob-app
+            --path tests/integration/cronjob-app \
+            --env BP_JVM_VERSION=17
           docker push "$MONITOR_IMAGE"
           docker push "$CRONJOB_IMAGE"
           echo "monitor_image=$MONITOR_IMAGE" >> "$GITHUB_OUTPUT"
