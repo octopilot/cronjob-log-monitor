@@ -1,12 +1,9 @@
-# Build stage: mount host Cargo/rustup for cache reuse; use BuildKit cache for target (host path not visible to daemon in CI)
+# Build stage: use BuildKit cache mounts (host paths not visible to daemon in GitHub Actions)
 FROM rust:1.85-bookworm AS builder
 WORKDIR /app
 COPY Cargo.toml Cargo.lock ./
 COPY src ./src
-ARG CARGO_CACHE_SOURCE
-ARG RUSTUP_CACHE_SOURCE
-RUN --mount=type=bind,source=${CARGO_CACHE_SOURCE},target=/usr/local/cargo,rw \
-    --mount=type=bind,source=${RUSTUP_CACHE_SOURCE},target=/usr/local/rustup,rw \
+RUN --mount=type=cache,target=/usr/local/cargo/registry \
     --mount=type=cache,target=/app/target \
     env CARGO_TARGET_DIR=/app/target CARGO_BUILD_INCREMENTAL=true \
     cargo build --release

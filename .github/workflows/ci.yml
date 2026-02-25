@@ -129,9 +129,7 @@ jobs:
         run: |
           MONITOR_IMAGE="ttl.sh/${TTL_UUID}-monitor:1h"
           CRONJOB_IMAGE="ttl.sh/${TTL_UUID}-cronjob:1h"
-          docker build -t "$MONITOR_IMAGE" -f Dockerfile . \
-            --build-arg CARGO_CACHE_SOURCE="$HOME/.cargo" \
-            --build-arg RUSTUP_CACHE_SOURCE="$HOME/.rustup"
+          docker build -t "$MONITOR_IMAGE" -f Dockerfile .
           pack build "$CRONJOB_IMAGE" \
             --builder paketobuildpacks/builder-jammy-base \
             --path tests/integration/cronjob-app \
