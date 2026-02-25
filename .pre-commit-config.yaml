@@ -12,10 +12,19 @@ repos:
       - id: mixed-line-ending
         args: ['--fix', 'lf']
       - id: check-yaml
+        # Helm chart templates use {{ .Values }} etc.; use helm lint instead.
+        exclude: '^chart/templates/'
       - id: check-toml
 
   - repo: local
     hooks:
+      - id: helm-lint
+        name: helm lint
+        description: Lint Helm chart (use helm lint instead of check-yaml for templates)
+        entry: bash -c 'for d in chart; do [ -f "$d/Chart.yaml" ] && (cd "$d" && helm dependency build . 2>/dev/null; helm lint .); done'
+        language: system
+        files: '^chart/'
+
       - id: cargo-fmt-check
         name: cargo fmt (check)
         description: Fail if Rust code is not formatted
