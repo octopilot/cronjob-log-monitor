@@ -1,0 +1,14 @@
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: {{ include "cronjob-log-monitor.fullname" . }}
+  labels:
+    {{- include "cronjob-log-monitor.labels" . | nindent 4 }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: {{ include "cronjob-log-monitor.fullname" . }}
+subjects:
+  - kind: ServiceAccount
+    name: {{ include "cronjob-log-monitor.fullname" . }}
+    namespace: {{ .Release.Namespace }}

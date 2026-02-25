@@ -1,0 +1,72 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "cronjob-log-monitor.fullname" . }}
+  labels:
+    {{- include "cronjob-log-monitor.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "cronjob-log-monitor.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "cronjob-log-monitor.selectorLabels" . | nindent 8 }}
+    spec:
+      serviceAccountName: {{ include "cronjob-log-monitor.fullname" . }}
+      containers:
+        - name: {{ .Chart.Name }}
+          image: {{ .Values.image }}
+          imagePullPolicy: {{ .Values.imagePullPolicy }}
+          ports:
+            - name: health
+              containerPort: {{ .Values.healthPort }}
+              protocol: TCP
+          env:
+            - name: NAMESPACE
+              value: {{ .Values.watchNamespace | quote }}
+            - name: MONITOR_LABEL_SELECTOR
+              value: {{ .Values.monitorLabelSelector | quote }}
+            {{- if .Values.monitorPodNameRegex }}
+            - name: MONITOR_POD_NAME_REGEX
+              value: {{ .Values.monitorPodNameRegex | quote }}
+            {{- end }}
+            {{- if .Values.monitorLabelRegex }}
+            - name: MONITOR_LABEL_REGEX
+              value: {{ .Values.monitorLabelRegex | quote }}
+            {{- end }}
+            - name: MAX_SILENCE_MINUTES
+              value: {{ .Values.maxSilenceMinutes | quote }}
+            - name: CHECK_INTERVAL_SECONDS
+              value: {{ .Values.checkIntervalSeconds | quote }}
+            - name: GRACE_PERIOD_SECONDS
+              value: {{ .Values.gracePeriodSeconds | quote }}
+            - name: HEALTH_PORT
+              value: {{ .Values.healthPort | quote }}
+            {{- if .Values.logTimestampField }}
+            - name: LOG_TIMESTAMP_FIELD
+              value: {{ .Values.logTimestampField | quote }}
+            {{- end }}
+            - name: RBAC_MAX_ATTEMPTS
+              value: {{ toString .Values.rbacMaxAttempts | quote }}
+            - name: DD_AGENT_HOST
+              value: {{ .Values.ddAgentHost | quote }}
+            - name: DD_DOGSTATSD_PORT
+              value: {{ .Values.ddDogstatsdPort | quote }}
+            - name: DD_ENABLED
+              value: {{ .Values.ddEnabled | quote }}
+          livenessProbe:
+            httpGet:
+              path: /live
+              port: health
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /ready
+              port: health
+            initialDelaySeconds: 5
+            periodSeconds: 5
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}

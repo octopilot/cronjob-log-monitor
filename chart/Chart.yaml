@@ -1,0 +1,12 @@
+apiVersion: v2
+name: cronjob-log-monitor
+description: CronJob log monitor (stuck-detector) - watches pods by label and deletes those with no log activity
+type: application
+version: 0.1.0
+appVersion: "0.1.0"
+keywords:
+  - cronjob
+  - monitor
+  - stuck-detector
+  - kubernetes
+maintainers: []

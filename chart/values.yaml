@@ -1,0 +1,44 @@
+# Default values for cronjob-log-monitor.
+# Image is overridden by Skaffold when building and deploying (setValueTemplates).
+image: ghcr.io/octopilot/cronjob-log-monitor:dev
+imagePullPolicy: IfNotPresent
+
+nameOverride: ""
+fullnameOverride: ""
+
+# Namespace to deploy the monitor into (default: Release namespace)
+namespace: ""
+
+# Required: Kubernetes namespace to watch (e.g. sam-http-source)
+watchNamespace: ""
+
+# Required: Label selector for pods to monitor (e.g. monitor-logs=true)
+monitorLabelSelector: ""
+
+# Optional: regex to filter pod names (e.g. ^sam-http-source-.+)
+monitorPodNameRegex: ""
+
+# Optional: label_key=regex to filter by label value (e.g. job-name=^sam-http-source-.+)
+monitorLabelRegex: ""
+
+maxSilenceMinutes: 5
+checkIntervalSeconds: 30
+gracePeriodSeconds: 120
+healthPort: 1234
+logTimestampField: ""
+rbacMaxAttempts: 15
+
+# Datadog
+ddAgentHost: "127.0.0.1"
+ddDogstatsdPort: 8125
+ddEnabled: true
+
+resources: {}
+  # limits:
+  #   cpu: 100m
+  #   memory: 128Mi
+  # requests:
+  #   cpu: 50m
+  #   memory: 64Mi
+
+replicaCount: 1

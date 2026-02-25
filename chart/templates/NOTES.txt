@@ -1,0 +1,5 @@
+CronJob log monitor (stuck-detector) has been installed.
+
+1. Set watchNamespace and monitorLabelSelector in values (required).
+2. Ensure the namespace you deploy into is the one you want to watch, or adjust RBAC for cross-namespace.
+3. Health: kubectl port-forward svc/{{ include "cronjob-log-monitor.fullname" . }} {{ .Values.healthPort }}:{{ .Values.healthPort }} then curl http://localhost:{{ .Values.healthPort }}/health
