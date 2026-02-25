@@ -1,0 +1,20 @@
+# One-off Job for integration: run the same image once (no wait for schedule)
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: integration-job-once
+  namespace: default
+  labels:
+    integration: "yes"
+spec:
+  ttlSecondsAfterFinished: 300
+  template:
+    metadata:
+      labels:
+        integration: "yes"
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: cronjob-app
+          image: PLACEHOLDER_IMAGE
+          imagePullPolicy: Always
