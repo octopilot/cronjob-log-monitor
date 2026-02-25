@@ -85,7 +85,7 @@ jobs:
       - name: Build release binary
         env:
           CARGO_TARGET_DIR: ${{ github.workspace }}/target
-          CARGO_BUILD_INCREMENTAL: 1
+          CARGO_BUILD_INCREMENTAL: true
           RUSTFLAGS: -C link-arg=-fuse-ld=mold
         run: cargo build --release
 
