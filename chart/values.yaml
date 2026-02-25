@@ -9,16 +9,16 @@ fullnameOverride: ""
 # Namespace to deploy the monitor into (default: Release namespace)
 namespace: ""
 
-# Required: Kubernetes namespace to watch (e.g. sam-http-source)
+# Required: Kubernetes namespace to watch (e.g. myapp)
 watchNamespace: ""
 
 # Required: Label selector for pods to monitor (e.g. monitor-logs=true)
 monitorLabelSelector: ""
 
-# Optional: regex to filter pod names (e.g. ^sam-http-source-.+)
+# Optional: regex to filter pod names (e.g. ^myapp-.+)
 monitorPodNameRegex: ""
 
-# Optional: label_key=regex to filter by label value (e.g. job-name=^sam-http-source-.+)
+# Optional: label_key=regex to filter by label value (e.g. job-name=^myapp-.+)
 monitorLabelRegex: ""
 
 maxSilenceMinutes: 5
