@@ -1,0 +1,71 @@
+# Rust
+target/
+**/*.rs.bk
+# Cargo.lock: keep tracked for binaries (reproducible builds)
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+.project
+.classpath
+.settings/
+
+# OS
+.DS_Store
+Thumbs.db
+*.log
+
+# Environment and secrets
+.env
+.env.local
+.env.*.local
+*.pem
+*.key
+*.gpg
+private-key*
+
+# Helm
+chart/charts/
+*.tgz
+
+# Skaffold / Docker
+.docker/
+
+# Build and debug
+*.exe
+*.dll
+*.so
+*.dylib
+debug
+release
+
+# Logs and temp
+*.log
+tmp/
+temp/
+*.tmp
+*.temp
+*.backup
+*_backup_*
+
+# Coverage and tools
+coverage/
+*.profraw
+*.profdata
+tarpaulin-report.html
+
+# Python (if any tooling)
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+
+# Node (if any tooling)
+node_modules/
+npm-debug.log*
+.npm
+yarn-error.log
+.pnp.*

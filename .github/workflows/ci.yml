@@ -1,0 +1,127 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: 1
+
+jobs:
+  # ── 1. Auto-detect languages and versions from skaffold.yaml ───────────────
+  detect:
+    name: Detect Contexts
+    runs-on: ubuntu-latest
+    outputs:
+      pipeline-context: ${{ steps.detect.outputs.pipeline-context }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Detect Contexts
+        id: detect
+        uses: octopilot/actions/detect-contexts@main
+
+  # ── 2. Lint (pre-commit, language-aware) ───────────────────────────────────
+  lint:
+    needs: detect
+    if: toJSON(fromJson(needs.detect.outputs.pipeline-context).languages) != '[]'
+    name: Lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: octopilot/actions/lint@main
+        with:
+          pipeline-context: ${{ needs.detect.outputs.pipeline-context }}
+
+  # ── 3. Test (matrix per detected language context) ─────────────────────────
+  test:
+    needs: detect
+    if: toJSON(fromJson(needs.detect.outputs.pipeline-context).matrix) != '[]'
+    name: Test
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include: ${{ fromJson(needs.detect.outputs.pipeline-context).matrix }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: octopilot/actions/test@main
+        with:
+          pipeline-context: ${{ toJson(matrix) }}
+
+  # ── 4. Integration (smoke: binary runs and fails fast without required env) ─
+  integration:
+    name: Integration
+    needs: [lint, test]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - run: cargo build --release
+      - name: Smoke run (expect missing MONITOR_LABEL_SELECTOR)
+        run: |
+          set +e
+          out=$(./target/release/cronjob-log-monitor 2>&1)
+          code=$?
+          echo "$out"
+          if [ $code -eq 0 ]; then exit 1; fi
+          echo "$out" | grep -q "MONITOR_LABEL_SELECTOR" || exit 1
+
+  # ── 5. Build release binary ────────────────────────────────────────────────
+  build-release:
+    name: Build Release
+    needs: [lint, test]
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - run: cargo build --release
+      - uses: actions/upload-artifact@v4
+        with:
+          name: cronjob-log-monitor-binary
+          path: target/release/cronjob-log-monitor
+
+  # ── 6. Release notes (on tag: generate and publish to GitHub Release) ─────
+  release-notes:
+    name: Release Notes
+    needs: [build-release]
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Find Previous Tag
+        id: prev_tag
+        uses: octopilot/actions/previous-tag@main
+        with:
+          fallback: "v0.0.0"
+
+      - name: Generate Release Notes
+        id: release_notes
+        uses: octopilot/actions/release@main
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        with:
+          version: ${{ github.ref_name }}
+          since_tag: ${{ steps.prev_tag.outputs.tag }}
+          provider: anthropic
+
+      - name: Download binary artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: cronjob-log-monitor-binary
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          body_path: ${{ steps.release_notes.outputs.body_file }}
+          files: cronjob-log-monitor-binary/cronjob-log-monitor
