@@ -38,12 +38,15 @@ jobs:
           pipeline-context: ${{ needs.detect.outputs.pipeline-context }}
 
   # ── 3. Test (matrix per detected language context) ─────────────────────────
+  # fail-fast: false so one failing context (e.g. Rust) does not cancel others
+  # (Java, Helm). Integration runs only when all test matrix jobs pass.
   test:
     needs: detect
     if: toJSON(fromJson(needs.detect.outputs.pipeline-context).matrix) != '[]'
     name: Test
     runs-on: ubuntu-latest
     strategy:
+      fail-fast: false
       matrix:
         include: ${{ fromJson(needs.detect.outputs.pipeline-context).matrix }}
     steps:
