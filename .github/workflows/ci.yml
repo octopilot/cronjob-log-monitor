@@ -192,11 +192,30 @@ jobs:
       - name: Load artifact outputs
         id: artifacts
         run: |
-          find artifact-outputs -name '*.txt' -exec cat {} \; 2>/dev/null | grep -E '^(monitor_image|cronjob_image|chart_ref|chart_version)=' | sort -u > env.txt
-          echo "monitor_image=$(grep '^monitor_image=' env.txt | cut -d= -f2-)" >> "$GITHUB_OUTPUT"
-          echo "cronjob_image=$(grep '^cronjob_image=' env.txt | cut -d= -f2-)" >> "$GITHUB_OUTPUT"
-          echo "chart_ref=$(grep '^chart_ref=' env.txt | cut -d= -f2-)" >> "$GITHUB_OUTPUT"
-          echo "chart_version=$(grep '^chart_version=' env.txt | cut -d= -f2-)" >> "$GITHUB_OUTPUT"
+          set -e
+          # Collect all key=value lines from matrix artifact .txt files (path may be artifact-out/<name>.txt under each integration-* dir)
+          env_txt=""
+          while IFS= read -r f; do
+            env_txt="${env_txt}$(cat "$f" 2>/dev/null)"
+            env_txt="${env_txt}"$'\n'
+          done < <(find artifact-outputs -type f -name '*.txt' 2>/dev/null | sort)
+          echo "$env_txt" | grep -E '^(monitor_image|cronjob_image|chart_ref|chart_version)=' | sort -u > env.txt
+          MONITOR_IMAGE="$(grep '^monitor_image=' env.txt | cut -d= -f2- | head -1)"
+          CRONJOB_IMAGE="$(grep '^cronjob_image=' env.txt | cut -d= -f2- | head -1)"
+          CHART_REF="$(grep '^chart_ref=' env.txt | cut -d= -f2- | head -1)"
+          CHART_VERSION="$(grep '^chart_version=' env.txt | cut -d= -f2- | head -1)"
+          echo "monitor_image=${MONITOR_IMAGE}" >> "$GITHUB_OUTPUT"
+          echo "cronjob_image=${CRONJOB_IMAGE}" >> "$GITHUB_OUTPUT"
+          echo "chart_ref=${CHART_REF}" >> "$GITHUB_OUTPUT"
+          echo "chart_version=${CHART_VERSION}" >> "$GITHUB_OUTPUT"
+          if [ -z "$MONITOR_IMAGE" ] || [ -z "$CRONJOB_IMAGE" ] || [ -z "$CHART_REF" ] || [ -z "$CHART_VERSION" ]; then
+            echo "::error::Missing artifact outputs: monitor_image=${MONITOR_IMAGE:+set} cronjob_image=${CRONJOB_IMAGE:+set} chart_ref=${CHART_REF:+set} chart_version=${CHART_VERSION:+set}"
+            echo "env.txt contents:"
+            cat env.txt || true
+            echo "artifact-outputs layout:"
+            find artifact-outputs -type f 2>/dev/null || true
+            exit 1
+          fi
 
       - name: Create Kind cluster (Kubernetes 1.34.3)
         uses: helm/kind-action@v1
