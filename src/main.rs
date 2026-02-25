@@ -6,10 +6,10 @@
 
 use anyhow::{Context, Result};
 use axum::{extract::State, http::StatusCode, response::Json, routing::get, Router};
-use chrono::{DateTime, Utc};
-use futures::{StreamExt, pin_mut};
-use k8s_openapi::api::core::v1::Pod;
 use cadence::prelude::*;
+use chrono::{DateTime, Utc};
+use futures::{pin_mut, StreamExt};
+use k8s_openapi::api::core::v1::Pod;
 use kube::{
     api::{Api, ListParams, LogParams},
     runtime::watcher::{self, Config},
@@ -49,8 +49,8 @@ struct MonitorConfig {
 
 impl MonitorConfig {
     fn from_env() -> Result<Self> {
-        let monitor_label_selector =
-            std::env::var("MONITOR_LABEL_SELECTOR").context("MONITOR_LABEL_SELECTOR is required")?;
+        let monitor_label_selector = std::env::var("MONITOR_LABEL_SELECTOR")
+            .context("MONITOR_LABEL_SELECTOR is required")?;
         let pod_name_regex = std::env::var("MONITOR_POD_NAME_REGEX")
             .ok()
             .filter(|s| !s.is_empty())
@@ -154,7 +154,10 @@ fn pod_matches_filters(config: &MonitorConfig, pod: &Pod) -> bool {
     }
     if let Some((ref label_key, ref re)) = config.label_regex {
         let labels = pod.metadata.labels.as_ref();
-        let val = labels.and_then(|l| l.get(label_key)).map(|v| v.as_str()).unwrap_or("");
+        let val = labels
+            .and_then(|l| l.get(label_key))
+            .map(|v| v.as_str())
+            .unwrap_or("");
         if !re.is_match(val) {
             return false;
         }
@@ -285,37 +288,35 @@ async fn watch_pods(
 
     while let Some(event_result) = watcher.next().await {
         match event_result {
-            Ok(event) => {
-                match event {
-                    kube::runtime::watcher::Event::Apply(pod) => {
-                        if !pod_matches_filters(&config, &pod) {
-                            if let Some(k) = pod_key(&pod) {
-                                let mut m = monitored.write().await;
-                                m.remove(&k);
-                            }
-                            continue;
-                        }
-                        if let Some(k) = pod_key(&pod) {
-                            let phase = pod.status.as_ref().and_then(|s| s.phase.as_deref());
-                            if phase == Some("Running") {
-                                let mut m = monitored.write().await;
-                                m.insert(k, pod);
-                            }
-                        }
-                    }
-                    kube::runtime::watcher::Event::Delete(pod) => {
+            Ok(event) => match event {
+                kube::runtime::watcher::Event::Apply(pod) => {
+                    if !pod_matches_filters(&config, &pod) {
                         if let Some(k) = pod_key(&pod) {
                             let mut m = monitored.write().await;
                             m.remove(&k);
                         }
+                        continue;
                     }
-                    kube::runtime::watcher::Event::Init
-                    | kube::runtime::watcher::Event::InitApply(_)
-                    | kube::runtime::watcher::Event::InitDone => {
-                        debug!("Initial watch event");
+                    if let Some(k) = pod_key(&pod) {
+                        let phase = pod.status.as_ref().and_then(|s| s.phase.as_deref());
+                        if phase == Some("Running") {
+                            let mut m = monitored.write().await;
+                            m.insert(k, pod);
+                        }
                     }
                 }
-            }
+                kube::runtime::watcher::Event::Delete(pod) => {
+                    if let Some(k) = pod_key(&pod) {
+                        let mut m = monitored.write().await;
+                        m.remove(&k);
+                    }
+                }
+                kube::runtime::watcher::Event::Init
+                | kube::runtime::watcher::Event::InitApply(_)
+                | kube::runtime::watcher::Event::InitDone => {
+                    debug!("Initial watch event");
+                }
+            },
             Err(e) => {
                 let s = e.to_string();
                 if s.contains("401") || s.contains("403") || s.contains("Unauthorized") {
@@ -350,9 +351,7 @@ async fn check_logs_loop(
         sleep(check_interval).await;
         let pods: Vec<(String, Pod)> = {
             let m = monitored.read().await;
-            m.iter()
-                .map(|(k, p)| (k.clone(), p.clone()))
-                .collect()
+            m.iter().map(|(k, p)| (k.clone(), p.clone())).collect()
         };
         let now = SystemTime::now();
         for (key, pod) in pods {
@@ -372,11 +371,7 @@ async fn check_logs_loop(
                 }
             };
             let fallback_now = now;
-            let last = last_activity_from_logs(
-                &logs,
-                timestamp_field.as_deref(),
-                fallback_now,
-            );
+            let last = last_activity_from_logs(&logs, timestamp_field.as_deref(), fallback_now);
             let mut la = last_activity.write().await;
             if let Some(t) = last {
                 la.insert(key.clone(), t);
@@ -395,12 +390,21 @@ async fn check_logs_loop(
                     error!("Failed to delete pod {}: {}", name, e);
                     continue;
                 }
-                let pod_age_secs = now.duration_since(pod_start).unwrap_or(Duration::ZERO).as_secs() as f64;
+                let pod_age_secs = now
+                    .duration_since(pod_start)
+                    .unwrap_or(Duration::ZERO)
+                    .as_secs() as f64;
                 let silence_secs = silence.as_secs() as f64;
                 if let Some(ref s) = statsd {
                     let _ = s.incr("cronjob_log_monitor.stuck_pod.deleted");
-                    let _ = s.gauge("cronjob_log_monitor.stuck_pod.silence_duration_seconds", silence_secs);
-                    let _ = s.gauge("cronjob_log_monitor.stuck_pod.pod_age_seconds", pod_age_secs);
+                    let _ = s.gauge(
+                        "cronjob_log_monitor.stuck_pod.silence_duration_seconds",
+                        silence_secs,
+                    );
+                    let _ = s.gauge(
+                        "cronjob_log_monitor.stuck_pod.pod_age_seconds",
+                        pod_age_secs,
+                    );
                 }
                 la.remove(&key);
             }
@@ -437,7 +441,10 @@ async fn health_handler(State(state): State<HealthState>) -> (StatusCode, Json<V
 }
 
 async fn liveness_handler() -> (StatusCode, Json<Value>) {
-    (StatusCode::OK, Json(serde_json::json!({ "status": "alive" })))
+    (
+        StatusCode::OK,
+        Json(serde_json::json!({ "status": "alive" })),
+    )
 }
 
 async fn readiness_handler(State(state): State<HealthState>) -> (StatusCode, Json<Value>) {
@@ -490,8 +497,7 @@ async fn main() -> Result<()> {
     let config_watch = config.clone();
     let client_watch = client.clone();
     tokio::spawn(async move {
-        if let Err(e) = watch_pods(client_watch, config_watch, monitored_clone, ready_clone).await
-        {
+        if let Err(e) = watch_pods(client_watch, config_watch, monitored_clone, ready_clone).await {
             error!("Pod watcher error: {}", e);
         }
     });
