@@ -55,55 +55,22 @@ jobs:
         with:
           pipeline-context: ${{ toJson(matrix) }}
 
-  # ── 4a. Integration validate (build, smoke, generate UUID for artifacts) ───
+  # ── 4a. Integration validate (build, smoke, generate UUID; skaffold + detect) ─
   integration-validate:
     name: Integration (validate)
-    needs: [lint, test]
+    needs: [detect, lint, test]
     runs-on: ubuntu-latest
     outputs:
-      uuid: ${{ steps.ttl.outputs.uuid }}
+      uuid: ${{ steps.validate.outputs.uuid }}
     steps:
       - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
-
-      - name: Cache Cargo and rustup
-        uses: actions/cache@v4
+      - name: Validate primary build and generate UUID
+        id: validate
+        uses: octopilot/actions/integration-validate@main
         with:
-          path: |
-            ~/.cargo/bin/
-            ~/.cargo/registry/index/
-            ~/.cargo/registry/cache/
-            ~/.cargo/git/db/
-            ~/.rustup/
-            target/
-          key: ${{ runner.os }}-rust-stable-cargo-test-${{ hashFiles('**/Cargo.lock') }}
-          restore-keys: |
-            ${{ runner.os }}-rust-stable-cargo-test-
-            ${{ runner.os }}-cargo-
-
-      - name: Install mold linker
-        run: sudo apt-get update -qq && sudo apt-get install -y mold
-
-      - name: Build release binary
-        env:
-          CARGO_TARGET_DIR: ${{ github.workspace }}/target
-          CARGO_BUILD_INCREMENTAL: true
-          RUSTFLAGS: -C link-arg=-fuse-ld=mold
-        run: cargo build --release
-
-      - name: Smoke run (expect missing MONITOR_LABEL_SELECTOR)
-        run: |
-          set +e
-          ./target/release/cronjob-log-monitor 2>&1 | tee /tmp/smoke-out
-          code=${PIPESTATUS[0]}
-          if [ "$code" -eq 0 ]; then echo "Expected binary to exit non-zero"; exit 1; fi
-          grep -q "MONITOR_LABEL_SELECTOR" /tmp/smoke-out || { echo "Expected error message to mention MONITOR_LABEL_SELECTOR"; exit 1; }
-
-      - name: Generate ttl.sh UUID
-        id: ttl
-        run: |
-          TTL_UUID="$(uuidgen | tr -d '-' | tr '[:upper:]' '[:lower:]')"
-          echo "uuid=${TTL_UUID}" >> "$GITHUB_OUTPUT"
+          pipeline-context: ${{ needs.detect.outputs.pipeline-context }}
+          smoke-binary-path: target/release/cronjob-log-monitor
+          smoke-expect-pattern: MONITOR_LABEL_SELECTOR
 
   # ── 4b. Integration artifacts (matrix: image | sample | chart) ──────────────
   integration-artifacts:
