@@ -1,0 +1,23 @@
+# Integration test CronJob: runs the Kotlin app image (image injected by CI).
+# Label integration=yes so the monitor can watch these pods.
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: integration-cronjob
+  namespace: default
+  labels:
+    integration: "yes"
+spec:
+  schedule: "0 * * * *"   # hourly; for integration we trigger once via job
+  jobTemplate:
+    spec:
+      template:
+        metadata:
+          labels:
+            integration: "yes"
+        spec:
+          restartPolicy: OnFailure
+          containers:
+            - name: cronjob-app
+              image: PLACEHOLDER_IMAGE
+              imagePullPolicy: Always

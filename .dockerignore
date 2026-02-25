@@ -1,0 +1,8 @@
+target/
+.git
+.github
+chart
+tests
+*.md
+.env
+.venv
