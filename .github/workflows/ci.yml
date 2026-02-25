@@ -92,11 +92,10 @@ jobs:
       - name: Smoke run (expect missing MONITOR_LABEL_SELECTOR)
         run: |
           set +e
-          out=$(./target/release/cronjob-log-monitor 2>&1)
-          code=$?
-          echo "$out"
-          if [ $code -eq 0 ]; then exit 1; fi
-          echo "$out" | grep -q "MONITOR_LABEL_SELECTOR" || exit 1
+          ./target/release/cronjob-log-monitor 2>&1 | tee /tmp/smoke-out
+          code=${PIPESTATUS[0]}
+          if [ "$code" -eq 0 ]; then echo "Expected binary to exit non-zero"; exit 1; fi
+          grep -q "MONITOR_LABEL_SELECTOR" /tmp/smoke-out || { echo "Expected error message to mention MONITOR_LABEL_SELECTOR"; exit 1; }
 
       - name: Create Kind cluster (Kubernetes 1.34.3)
         uses: helm/kind-action@v1
@@ -126,13 +125,13 @@ jobs:
         env:
           TTL_UUID: ${{ steps.ttl.outputs.uuid }}
           DOCKER_BUILDKIT: 1
+          CARGO_BUILD_INCREMENTAL: true
         run: |
           MONITOR_IMAGE="ttl.sh/${TTL_UUID}-monitor:1h"
           CRONJOB_IMAGE="ttl.sh/${TTL_UUID}-cronjob:1h"
           docker build -t "$MONITOR_IMAGE" -f Dockerfile . \
             --build-arg CARGO_CACHE_SOURCE="$HOME/.cargo" \
-            --build-arg RUSTUP_CACHE_SOURCE="$HOME/.rustup" \
-            --build-arg TARGET_CACHE_SOURCE="${{ github.workspace }}/target"
+            --build-arg RUSTUP_CACHE_SOURCE="$HOME/.rustup"
           pack build "$CRONJOB_IMAGE" \
             --builder paketobuildpacks/builder-jammy-base \
             --path tests/integration/cronjob-app \
