@@ -73,7 +73,7 @@ jobs:
   # ── 5. Build release binary ────────────────────────────────────────────────
   build-release:
     name: Build Release
-    needs: [lint, test]
+    needs: [integration]
     if: github.event_name == 'push'
     runs-on: ubuntu-latest
     steps:

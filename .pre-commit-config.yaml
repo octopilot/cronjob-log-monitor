@@ -1,3 +1,7 @@
+# Install hooks: just install-hooks   (or: pre-commit install)
+# Run manually: just pre-commit      (or: pre-commit run --all-files)
+# Pre-commit blocks commits that are unformatted or fail clippy.
+
 repos:
   - repo: https://github.com/pre-commit/pre-commit-hooks
     rev: v5.0.0
@@ -7,10 +11,23 @@ repos:
       - id: trailing-whitespace
       - id: mixed-line-ending
         args: ['--fix', 'lf']
+      - id: check-yaml
+      - id: check-toml
+
   - repo: local
     hooks:
-      - id: gradle-check
-        name: Gradle checkstyle and test
-        entry: ./gradlew checkstyleMain checkstyleTest clean test
+      - id: cargo-fmt-check
+        name: cargo fmt (check)
+        description: Fail if Rust code is not formatted
+        entry: cargo fmt --all -- --check
         language: system
+        types: [rust]
+        pass_filenames: false
+
+      - id: cargo-clippy
+        name: cargo clippy
+        description: Fail if Rust code has lint errors
+        entry: cargo clippy --all-targets --all-features -- -D warnings
+        language: system
+        types: [rust]
         pass_filenames: false
