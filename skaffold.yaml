@@ -16,3 +16,7 @@ build:
       context: tests/integration/cronjob-app
       buildpacks:
         builder: paketobuildpacks/builder-jammy-base
+        env:
+          # Override JVM version: Liberica 17.0.18 download can fail (GitHub/Bell-SW).
+          # Java 21 is supported by Spring Boot 3.4 and Kotlin 2.0.
+          BP_JVM_VERSION: "21"
