@@ -77,7 +77,7 @@ jobs:
   integration-artifacts:
     name: Integration (${{ matrix.suffix || matrix.output_key }})
     needs: [detect, integration-validate]
-    if: length(fromJson(needs.detect.outputs.pipeline-context).integration_matrix) > 0
+    if: toJSON(fromJson(needs.detect.outputs.pipeline-context).integration_matrix) != '[]'
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
