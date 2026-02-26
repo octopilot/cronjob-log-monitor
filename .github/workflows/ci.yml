@@ -86,10 +86,6 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Setup pack CLI
-        if: matrix.build_method == 'pack'
-        uses: buildpacks/github-actions/setup-pack@v5.1.0
-
       - name: Build and push artifact
         id: build
         uses: octopilot/actions/integration-build-artifact@main
@@ -101,11 +97,13 @@ jobs:
         run: |
           mkdir -p artifact-out
           mv outputs.txt "artifact-out/${{ matrix.output_key }}.txt" 2>/dev/null || true
+          # Include build_result.json when present (e.g. from octopilot action) for merge in deploy
+          [ -f build_result.json ] && cp build_result.json artifact-out/ || true
 
       - uses: actions/upload-artifact@v4
         with:
           name: integration-${{ matrix.output_key }}
-          path: artifact-out/${{ matrix.output_key }}.txt
+          path: artifact-out
           retention-days: 1
 
   # ── 4c. Integration deploy (Kind + Helm + CronJob) ─────────────────────────
@@ -122,22 +120,32 @@ jobs:
           pattern: integration-*
           path: artifact-outputs
 
+      - name: Merge build_result.json from all integration jobs
+        uses: octopilot/actions/merge-build-results@main
+        with:
+          directory: artifact-outputs
+          output-path: build_result.json
+
       - name: Load artifact outputs
         id: artifacts
         run: |
           set -e
-          # Collect key=value from integration artifact .txt files (detect uses generic keys: image_<suffix>, chart_ref, chart_version)
+          # Collect key=value from integration artifact .txt files (merge may nest under artifact-outputs/<name>/ or artifact-outputs/artifact-out/)
           env_txt=""
           while IFS= read -r f; do
-            env_txt="${env_txt}$(cat "$f" 2>/dev/null)"
-            env_txt="${env_txt}"$'\n'
+            [ -f "$f" ] && env_txt="${env_txt}$(cat "$f" 2>/dev/null)"$'\n'
           done < <(find artifact-outputs -type f -name '*.txt' 2>/dev/null | sort)
           echo "$env_txt" | grep -E '^(image_|chart_ref|chart_version)=' | sort -u > env.txt
-          IMAGE_MONITOR="$(grep '^image_monitor=' env.txt | cut -d= -f2- | head -1)"
-          IMAGE_CRONJOB="$(grep '^image_cronjob=' env.txt | cut -d= -f2- | head -1)"
-          CHART_REF="$(grep '^chart_ref=' env.txt | cut -d= -f2- | head -1)"
-          CHART_VERSION="$(grep '^chart_version=' env.txt | cut -d= -f2- | head -1)"
-          # Map generic keys to this repo's deploy convention
+          IMAGE_MONITOR="$(grep '^image_monitor=' env.txt 2>/dev/null | cut -d= -f2- | head -1)"
+          IMAGE_CRONJOB="$(grep '^image_cronjob=' env.txt 2>/dev/null | cut -d= -f2- | head -1)"
+          IMAGE_CHART="$(grep '^image_chart=' env.txt 2>/dev/null | cut -d= -f2- | head -1)"
+          CHART_REF="$(grep '^chart_ref=' env.txt 2>/dev/null | cut -d= -f2- | head -1)"
+          CHART_VERSION="$(grep '^chart_version=' env.txt 2>/dev/null | cut -d= -f2- | head -1)"
+          # Pack-built chart produces image_chart=host/repo:tag; derive OCI ref for helm when chart_ref not set
+          if [ -z "$CHART_REF" ] && [ -n "$IMAGE_CHART" ]; then
+            CHART_REF="oci://$(echo "$IMAGE_CHART" | cut -d: -f1)"
+            CHART_VERSION="${CHART_VERSION:-$(echo "$IMAGE_CHART" | cut -d: -f2)}"
+          fi
           echo "monitor_image=${IMAGE_MONITOR}" >> "$GITHUB_OUTPUT"
           echo "cronjob_image=${IMAGE_CRONJOB}" >> "$GITHUB_OUTPUT"
           echo "chart_ref=${CHART_REF}" >> "$GITHUB_OUTPUT"
