@@ -72,74 +72,40 @@ jobs:
           smoke-binary-path: target/release/cronjob-log-monitor
           smoke-expect-pattern: MONITOR_LABEL_SELECTOR
 
-  # ── 4b. Integration artifacts (matrix: image | sample | chart) ──────────────
+  # ── 4b. Integration artifacts (matrix from skaffold + chart_paths) ──────────
+  # Matrix is derived from detect: skaffold build.artifacts (docker if Dockerfile in context, else pack) and chart_paths.
   integration-artifacts:
-    name: Integration (${{ matrix.artifact }})
-    needs: integration-validate
+    name: Integration (${{ matrix.suffix || matrix.output_key }})
+    needs: [detect, integration-validate]
+    if: length(fromJson(needs.detect.outputs.pipeline-context).integration_matrix) > 0
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
-        include:
-          - artifact: image
-          - artifact: sample
-          - artifact: chart
+        include: ${{ fromJson(needs.detect.outputs.pipeline-context).integration_matrix }}
     steps:
       - uses: actions/checkout@v4
 
-      - name: Setup pack CLI (sample)
-        if: matrix.artifact == 'sample'
+      - name: Setup pack CLI
+        if: matrix.build_method == 'pack'
         uses: buildpacks/github-actions/setup-pack@v5.1.0
 
-      - name: Build and push monitor image to ttl.sh
-        if: matrix.artifact == 'image'
-        id: monitor-image
-        env:
-          DOCKER_BUILDKIT: 1
-          CARGO_BUILD_INCREMENTAL: true
-        uses: octopilot/actions/docker-to-ttl-sh@main
+      - name: Build and push artifact
+        id: build
+        uses: octopilot/actions/integration-build-artifact@main
         with:
+          artifact: ${{ toJson(matrix) }}
           ttl-uuid: ${{ needs.integration-validate.outputs.uuid }}
-          suffix: monitor
-          dockerfile: Dockerfile
-          context: .
-
-      - name: Build and push sample (cronjob) image to ttl.sh
-        if: matrix.artifact == 'sample'
-        id: cronjob-image
-        uses: octopilot/actions/paketo-to-ttl-sh@main
-        with:
-          ttl-uuid: ${{ needs.integration-validate.outputs.uuid }}
-          suffix: cronjob
-          path: tests/integration/cronjob-app
-          builder: paketobuildpacks/builder-jammy-base
-          build-env: BP_JVM_VERSION=17
-
-      - name: Write artifact outputs (image)
-        if: matrix.artifact == 'image'
-        run: echo "monitor_image=${{ steps.monitor-image.outputs.image }}" > outputs.txt
-
-      - name: Write artifact outputs (sample)
-        if: matrix.artifact == 'sample'
-        run: echo "cronjob_image=${{ steps.cronjob-image.outputs.image }}" > outputs.txt
-
-      - name: Package and push Helm chart
-        if: matrix.artifact == 'chart'
-        uses: octopilot/actions/helm-to-ttl-sh@main
-        with:
-          ttl-uuid: ${{ needs.integration-validate.outputs.uuid }}
-          chart-path: chart
-          output-path: outputs.txt
 
       - name: Upload artifact outputs
         run: |
           mkdir -p artifact-out
-          mv outputs.txt "artifact-out/${{ matrix.artifact }}.txt" 2>/dev/null || true
+          mv outputs.txt "artifact-out/${{ matrix.output_key }}.txt" 2>/dev/null || true
 
       - uses: actions/upload-artifact@v4
         with:
-          name: integration-${{ matrix.artifact }}
-          path: artifact-out/${{ matrix.artifact }}.txt
+          name: integration-${{ matrix.output_key }}
+          path: artifact-out/${{ matrix.output_key }}.txt
           retention-days: 1
 
   # ── 4c. Integration deploy (Kind + Helm + CronJob) ─────────────────────────
@@ -160,23 +126,24 @@ jobs:
         id: artifacts
         run: |
           set -e
-          # Collect all key=value lines from matrix artifact .txt files (path may be artifact-out/<name>.txt under each integration-* dir)
+          # Collect key=value from integration artifact .txt files (detect uses generic keys: image_<suffix>, chart_ref, chart_version)
           env_txt=""
           while IFS= read -r f; do
             env_txt="${env_txt}$(cat "$f" 2>/dev/null)"
             env_txt="${env_txt}"$'\n'
           done < <(find artifact-outputs -type f -name '*.txt' 2>/dev/null | sort)
-          echo "$env_txt" | grep -E '^(monitor_image|cronjob_image|chart_ref|chart_version)=' | sort -u > env.txt
-          MONITOR_IMAGE="$(grep '^monitor_image=' env.txt | cut -d= -f2- | head -1)"
-          CRONJOB_IMAGE="$(grep '^cronjob_image=' env.txt | cut -d= -f2- | head -1)"
+          echo "$env_txt" | grep -E '^(image_|chart_ref|chart_version)=' | sort -u > env.txt
+          IMAGE_MONITOR="$(grep '^image_monitor=' env.txt | cut -d= -f2- | head -1)"
+          IMAGE_CRONJOB="$(grep '^image_cronjob=' env.txt | cut -d= -f2- | head -1)"
           CHART_REF="$(grep '^chart_ref=' env.txt | cut -d= -f2- | head -1)"
           CHART_VERSION="$(grep '^chart_version=' env.txt | cut -d= -f2- | head -1)"
-          echo "monitor_image=${MONITOR_IMAGE}" >> "$GITHUB_OUTPUT"
-          echo "cronjob_image=${CRONJOB_IMAGE}" >> "$GITHUB_OUTPUT"
+          # Map generic keys to this repo's deploy convention
+          echo "monitor_image=${IMAGE_MONITOR}" >> "$GITHUB_OUTPUT"
+          echo "cronjob_image=${IMAGE_CRONJOB}" >> "$GITHUB_OUTPUT"
           echo "chart_ref=${CHART_REF}" >> "$GITHUB_OUTPUT"
           echo "chart_version=${CHART_VERSION}" >> "$GITHUB_OUTPUT"
-          if [ -z "$MONITOR_IMAGE" ] || [ -z "$CRONJOB_IMAGE" ] || [ -z "$CHART_REF" ] || [ -z "$CHART_VERSION" ]; then
-            echo "::error::Missing artifact outputs: monitor_image=${MONITOR_IMAGE:+set} cronjob_image=${CRONJOB_IMAGE:+set} chart_ref=${CHART_REF:+set} chart_version=${CHART_VERSION:+set}"
+          if [ -z "$IMAGE_MONITOR" ] || [ -z "$IMAGE_CRONJOB" ] || [ -z "$CHART_REF" ] || [ -z "$CHART_VERSION" ]; then
+            echo "::error::Missing artifact outputs: image_monitor=${IMAGE_MONITOR:+set} image_cronjob=${IMAGE_CRONJOB:+set} chart_ref=${CHART_REF:+set} chart_version=${CHART_VERSION:+set}"
             echo "env.txt contents:"
             cat env.txt || true
             echo "artifact-outputs layout:"
