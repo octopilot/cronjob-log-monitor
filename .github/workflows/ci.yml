@@ -134,20 +134,18 @@ jobs:
           IMAGE_MONITOR="$(jq -r '.builds[] | select(.imageName | test("cronjob-log-monitor$")) | .tag' build_result.json 2>/dev/null | head -1)"
           IMAGE_CHART="$(jq -r '.builds[] | select(.imageName | test("-chart$")) | .tag' build_result.json 2>/dev/null | head -1)"
           IMAGE_CRONJOB="$(jq -r '.builds[] | select(.imageName | test("integration-cronjob$")) | .tag' build_result.json 2>/dev/null | head -1)"
-          # Pack-built chart: use image ref as OCI chart for helm (oci://host/repo, tag from image tag)
-          CHART_REF="oci://$(echo "$IMAGE_CHART" | cut -d: -f1)"
-          CHART_VERSION="$(echo "$IMAGE_CHART" | cut -d: -f2 | cut -d@ -f1)"
+          # Full OCI chart ref (tag + digest) so Helm does not need to list tags (ttl.sh may not support that)
+          CHART_REF="oci://${IMAGE_CHART}"
           echo "monitor_image=${IMAGE_MONITOR}" >> "$GITHUB_OUTPUT"
           echo "cronjob_image=${IMAGE_CRONJOB}" >> "$GITHUB_OUTPUT"
           echo "chart_ref=${CHART_REF}" >> "$GITHUB_OUTPUT"
-          echo "chart_version=${CHART_VERSION}" >> "$GITHUB_OUTPUT"
           echo "=== build_result.json (merged) ==="
           cat build_result.json | jq .
           echo "=== Resolved deploy outputs ==="
           echo "monitor_image=${IMAGE_MONITOR}"
           echo "cronjob_image=${IMAGE_CRONJOB}"
           echo "chart_ref=${CHART_REF}"
-          echo "chart_version=${CHART_VERSION}"
+          echo "chart_image=${IMAGE_CHART}"
           if [ -z "$IMAGE_MONITOR" ] || [ -z "$IMAGE_CRONJOB" ] || [ -z "$IMAGE_CHART" ]; then
             echo "::error::Missing builds in build_result.json: monitor=${IMAGE_MONITOR:+set} cronjob=${IMAGE_CRONJOB:+set} chart=${IMAGE_CHART:+set}"
             jq -r '.builds[]? | "\(.imageName): \(.tag)"' build_result.json 2>/dev/null || true
@@ -172,7 +170,6 @@ jobs:
         run: |
           helm install cronjob-log-monitor \
             "${{ steps.artifacts.outputs.chart_ref }}" \
-            --version "${{ steps.artifacts.outputs.chart_version }}" \
             --create-namespace \
             --namespace cronjob-log-monitor \
             --set watchNamespace=default \
