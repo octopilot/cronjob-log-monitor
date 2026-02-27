@@ -179,6 +179,7 @@ jobs:
           kubectl get all -n cronjob-log-monitor
           helm status cronjob-log-monitor -n cronjob-log-monitor
 
+      # ttl might not support oci charts
       - name: Deploy integration CronJob to Kind
         run: |
           CRONJOB_IMAGE="${{ steps.artifacts.outputs.cronjob_image }}"
