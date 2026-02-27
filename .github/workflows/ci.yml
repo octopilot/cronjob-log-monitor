@@ -141,6 +141,13 @@ jobs:
           echo "cronjob_image=${IMAGE_CRONJOB}" >> "$GITHUB_OUTPUT"
           echo "chart_ref=${CHART_REF}" >> "$GITHUB_OUTPUT"
           echo "chart_version=${CHART_VERSION}" >> "$GITHUB_OUTPUT"
+          echo "=== build_result.json (merged) ==="
+          cat build_result.json | jq .
+          echo "=== Resolved deploy outputs ==="
+          echo "monitor_image=${IMAGE_MONITOR}"
+          echo "cronjob_image=${IMAGE_CRONJOB}"
+          echo "chart_ref=${CHART_REF}"
+          echo "chart_version=${CHART_VERSION}"
           if [ -z "$IMAGE_MONITOR" ] || [ -z "$IMAGE_CRONJOB" ] || [ -z "$IMAGE_CHART" ]; then
             echo "::error::Missing builds in build_result.json: monitor=${IMAGE_MONITOR:+set} cronjob=${IMAGE_CRONJOB:+set} chart=${IMAGE_CHART:+set}"
             jq -r '.builds[]? | "\(.imageName): \(.tag)"' build_result.json 2>/dev/null || true
