@@ -165,26 +165,42 @@ jobs:
           cluster_name: cronjob-log-monitor
           wait: 120s
 
-      - name: Install Helm
-        run: |
-          curl -sSL "https://get.helm.sh/helm-v3.16.4-linux-amd64.tar.gz" | tar -xzf - -C /tmp
-          sudo mv /tmp/linux-amd64/helm /usr/local/bin/helm
-          helm version --short
+      - name: Setup kubectl
+        uses: octopilot/actions/setup-tools@main
+        with:
+          kubectl_version: "1.34.3"
 
-      - name: Deploy Helm chart to Kind (from OCI)
+      - name: Setup Flux CLI
+        uses: fluxcd/flux2/action@main
+        with:
+          version: "latest"
+
+      - name: Install Flux in Kind
         run: |
-          helm install cronjob-log-monitor \
-            "${{ steps.artifacts.outputs.chart_ref }}" \
-            --create-namespace \
-            --namespace cronjob-log-monitor \
-            --set watchNamespace=default \
-            --set monitorLabelSelector=integration=yes \
-            --set image=${{ steps.artifacts.outputs.monitor_image }} \
-            --set imagePullPolicy=Always
+          flux install --export > k8s/deployment/flux-system/gotk-components.yaml
+          kubectl apply -f k8s/deployment/flux-system/gotk-components.yaml
+          kubectl wait --for=condition=ready pod -l app=source-controller -n flux-system --timeout=120s || true
+          kubectl wait --for=condition=ready pod -l app=helm-controller -n flux-system --timeout=120s || true
+
+      - name: Deploy cronjob-log-monitor via Flux (OCI chart + HelmRelease)
+        env:
+          CHART_REF: ${{ steps.artifacts.outputs.chart_ref }}
+          MONITOR_IMAGE: ${{ steps.artifacts.outputs.monitor_image }}
+        run: |
+          set -e
+          # Derive OCI URL and digest from chart_ref (oci://host/repo@sha256:...)
+          CHART_OCI_URL="$(echo "$CHART_REF" | sed 's|^oci://||' | cut -d'@' -f1)"
+          CHART_DIGEST="$(echo "$CHART_REF" | sed 's|^oci://||' | cut -d'@' -f2)"
+          export CHART_OCI_URL CHART_DIGEST
+          kubectl apply -f k8s/deployment/namespace.yaml
+          envsubst < k8s/deployment/ocirepository.yaml | kubectl apply -f -
+          envsubst < k8s/deployment/helmrelease.yaml | kubectl apply -f -
+          flux reconcile source oci cronjob-log-monitor-chart -n cronjob-log-monitor --timeout=2m
+          flux reconcile helmrelease cronjob-log-monitor -n cronjob-log-monitor --timeout=3m
           kubectl get all -n cronjob-log-monitor
-          helm status cronjob-log-monitor -n cronjob-log-monitor
+          flux get helmrelease -n cronjob-log-monitor
 
-      # ttl might not support oci charts
+      # Deploy integration CronJob (sample app) to default namespace
       - name: Deploy integration CronJob to Kind
         run: |
           CRONJOB_IMAGE="${{ steps.artifacts.outputs.cronjob_image }}"

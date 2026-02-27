@@ -1,0 +1,15 @@
+# OCI chart source for cronjob-log-monitor. CHART_OCI_URL and CHART_DIGEST are
+# substituted by CI from build_result.json (e.g. ttl.sh/<uuid>-chart, sha256:...).
+apiVersion: source.toolkit.fluxcd.io/v1
+kind: OCIRepository
+metadata:
+  name: cronjob-log-monitor-chart
+  namespace: cronjob-log-monitor
+spec:
+  interval: 5m
+  url: oci://${CHART_OCI_URL}
+  ref:
+    digest: "${CHART_DIGEST}"
+  layerSelector:
+    mediaType: "application/vnd.cncf.helm.chart.content.v1.tar+gzip"
+    operation: copy

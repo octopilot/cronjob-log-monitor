@@ -1,0 +1,15 @@
+# Kind overlay: patches for running on Kind (e.g. timeouts, imagePullPolicy).
+# CI builds with substituted deployment base then applies this overlay.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - ../../deployment
+patches:
+  # Ensure imagePullPolicy is Always for ephemeral ttl.sh images on Kind
+  - target:
+      kind: HelmRelease
+      name: cronjob-log-monitor
+    patch: |
+      - op: replace
+        path: /spec/values/imagePullPolicy
+        value: Always

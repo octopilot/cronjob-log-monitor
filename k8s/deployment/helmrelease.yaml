@@ -1,0 +1,26 @@
+# Helm release for cronjob-log-monitor. MONITOR_IMAGE is substituted by CI.
+apiVersion: helm.toolkit.fluxcd.io/v2
+kind: HelmRelease
+metadata:
+  name: cronjob-log-monitor
+  namespace: cronjob-log-monitor
+spec:
+  interval: 5m
+  chartRef:
+    kind: OCIRepository
+    name: cronjob-log-monitor-chart
+    namespace: cronjob-log-monitor
+  releaseName: cronjob-log-monitor
+  targetNamespace: cronjob-log-monitor
+  install:
+    createNamespace: true
+    remediation:
+      retries: 3
+  upgrade:
+    remediation:
+      retries: 3
+  values:
+    watchNamespace: default
+    monitorLabelSelector: integration=yes
+    image: ${MONITOR_IMAGE}
+    imagePullPolicy: Always
