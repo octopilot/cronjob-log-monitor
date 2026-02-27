@@ -130,32 +130,20 @@ jobs:
         id: artifacts
         run: |
           set -e
-          # Collect key=value from integration artifact .txt files (merge may nest under artifact-outputs/<name>/ or artifact-outputs/artifact-out/)
-          env_txt=""
-          while IFS= read -r f; do
-            [ -f "$f" ] && env_txt="${env_txt}$(cat "$f" 2>/dev/null)"$'\n'
-          done < <(find artifact-outputs -type f -name '*.txt' 2>/dev/null | sort)
-          echo "$env_txt" | grep -E '^(image_|chart_ref|chart_version)=' | sort -u > env.txt
-          IMAGE_MONITOR="$(grep '^image_monitor=' env.txt 2>/dev/null | cut -d= -f2- | head -1)"
-          IMAGE_CRONJOB="$(grep '^image_cronjob=' env.txt 2>/dev/null | cut -d= -f2- | head -1)"
-          IMAGE_CHART="$(grep '^image_chart=' env.txt 2>/dev/null | cut -d= -f2- | head -1)"
-          CHART_REF="$(grep '^chart_ref=' env.txt 2>/dev/null | cut -d= -f2- | head -1)"
-          CHART_VERSION="$(grep '^chart_version=' env.txt 2>/dev/null | cut -d= -f2- | head -1)"
-          # Pack-built chart produces image_chart=host/repo:tag; derive OCI ref for helm when chart_ref not set
-          if [ -z "$CHART_REF" ] && [ -n "$IMAGE_CHART" ]; then
-            CHART_REF="oci://$(echo "$IMAGE_CHART" | cut -d: -f1)"
-            CHART_VERSION="${CHART_VERSION:-$(echo "$IMAGE_CHART" | cut -d: -f2)}"
-          fi
+          # Standardize on merged build_result.json (op/skaffold output); select by imageName
+          IMAGE_MONITOR="$(jq -r '.builds[] | select(.imageName | test("cronjob-log-monitor$")) | .tag' build_result.json 2>/dev/null | head -1)"
+          IMAGE_CHART="$(jq -r '.builds[] | select(.imageName | test("-chart$")) | .tag' build_result.json 2>/dev/null | head -1)"
+          IMAGE_CRONJOB="$(jq -r '.builds[] | select(.imageName | test("integration-cronjob$")) | .tag' build_result.json 2>/dev/null | head -1)"
+          # Pack-built chart: use image ref as OCI chart for helm (oci://host/repo, tag from image tag)
+          CHART_REF="oci://$(echo "$IMAGE_CHART" | cut -d: -f1)"
+          CHART_VERSION="$(echo "$IMAGE_CHART" | cut -d: -f2 | cut -d@ -f1)"
           echo "monitor_image=${IMAGE_MONITOR}" >> "$GITHUB_OUTPUT"
           echo "cronjob_image=${IMAGE_CRONJOB}" >> "$GITHUB_OUTPUT"
           echo "chart_ref=${CHART_REF}" >> "$GITHUB_OUTPUT"
           echo "chart_version=${CHART_VERSION}" >> "$GITHUB_OUTPUT"
-          if [ -z "$IMAGE_MONITOR" ] || [ -z "$IMAGE_CRONJOB" ] || [ -z "$CHART_REF" ] || [ -z "$CHART_VERSION" ]; then
-            echo "::error::Missing artifact outputs: image_monitor=${IMAGE_MONITOR:+set} image_cronjob=${IMAGE_CRONJOB:+set} chart_ref=${CHART_REF:+set} chart_version=${CHART_VERSION:+set}"
-            echo "env.txt contents:"
-            cat env.txt || true
-            echo "artifact-outputs layout:"
-            find artifact-outputs -type f 2>/dev/null || true
+          if [ -z "$IMAGE_MONITOR" ] || [ -z "$IMAGE_CRONJOB" ] || [ -z "$IMAGE_CHART" ]; then
+            echo "::error::Missing builds in build_result.json: monitor=${IMAGE_MONITOR:+set} cronjob=${IMAGE_CRONJOB:+set} chart=${IMAGE_CHART:+set}"
+            jq -r '.builds[]? | "\(.imageName): \(.tag)"' build_result.json 2>/dev/null || true
             exit 1
           fi
 
