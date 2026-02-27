@@ -170,17 +170,10 @@ jobs:
         with:
           kubectl_version: "1.34.3"
 
-      - name: Setup Flux CLI
-        uses: fluxcd/flux2/action@main
+      - name: Setup Flux in Kind
+        uses: octopilot/actions/setup-flux@main
         with:
-          version: "latest"
-
-      - name: Install Flux in Kind
-        run: |
-          flux install --export > k8s/deployment/flux-system/gotk-components.yaml
-          kubectl apply -f k8s/deployment/flux-system/gotk-components.yaml
-          kubectl wait --for=condition=ready pod -l app=source-controller -n flux-system --timeout=120s || true
-          kubectl wait --for=condition=ready pod -l app=helm-controller -n flux-system --timeout=120s || true
+          export_path: k8s/deployment/flux-system/gotk-components.yaml
 
       - name: Deploy cronjob-log-monitor via Flux (OCI chart + HelmRelease)
         env:
@@ -188,6 +181,7 @@ jobs:
           MONITOR_IMAGE: ${{ steps.artifacts.outputs.monitor_image }}
         run: |
           set -e
+          RECONCILE_FAILED=0
           # Derive OCI URL and digest from chart_ref (oci://host/repo@sha256:...)
           CHART_OCI_URL="$(echo "$CHART_REF" | sed 's|^oci://||' | cut -d'@' -f1)"
           CHART_DIGEST="$(echo "$CHART_REF" | sed 's|^oci://||' | cut -d'@' -f2)"
@@ -195,10 +189,27 @@ jobs:
           kubectl apply -f k8s/deployment/namespace.yaml
           envsubst < k8s/deployment/ocirepository.yaml | kubectl apply -f -
           envsubst < k8s/deployment/helmrelease.yaml | kubectl apply -f -
-          flux reconcile source oci cronjob-log-monitor-chart -n cronjob-log-monitor --timeout=2m
-          flux reconcile helmrelease cronjob-log-monitor -n cronjob-log-monitor --timeout=3m
+          flux reconcile source oci cronjob-log-monitor-chart -n cronjob-log-monitor --timeout=2m || RECONCILE_FAILED=1
+          flux reconcile helmrelease cronjob-log-monitor -n cronjob-log-monitor --timeout=3m || RECONCILE_FAILED=1
           kubectl get all -n cronjob-log-monitor
           flux get helmrelease -n cronjob-log-monitor
+          if [ "$RECONCILE_FAILED" -ne 0 ]; then
+            echo "::group::Flux controller logs and events (reconcile failed)"
+            echo "=== source-controller logs (flux-system) ==="
+            kubectl logs -n flux-system -l app=source-controller --tail=300 --all-containers=true 2>/dev/null || true
+            echo "=== helm-controller logs (flux-system) ==="
+            kubectl logs -n flux-system -l app=helm-controller --tail=300 --all-containers=true 2>/dev/null || true
+            echo "=== Events (flux-system) ==="
+            kubectl get events -n flux-system --sort-by='.lastTimestamp' 2>/dev/null | tail -80 || true
+            echo "=== Events (cronjob-log-monitor) ==="
+            kubectl get events -n cronjob-log-monitor --sort-by='.lastTimestamp' 2>/dev/null | tail -80 || true
+            echo "=== Flux get source oci ==="
+            flux get source oci -n cronjob-log-monitor 2>/dev/null || true
+            echo "=== Flux get helmrelease ==="
+            flux get helmrelease -n cronjob-log-monitor 2>/dev/null || true
+            echo "::endgroup::"
+            exit 1
+          fi
 
       # Deploy integration CronJob (sample app) to default namespace
       - name: Deploy integration CronJob to Kind
