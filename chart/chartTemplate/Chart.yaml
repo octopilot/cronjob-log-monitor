@@ -1,5 +1,5 @@
 apiVersion: v2
-name: cronjob-log-monitor
+name: cronjob-log-monitor-chart
 description: CronJob log monitor (stuck-detector) - watches pods by label and deletes those with no log activity
 type: application
 version: 0.1.0

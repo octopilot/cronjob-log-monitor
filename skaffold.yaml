@@ -7,14 +7,14 @@ build:
     - image: ghcr.io/octopilot/cronjob-log-monitor
       context: .
       buildpacks:
-        builder: ghcr.io/octopilot/builder-jammy-base:rust-builder-d84dd54
+        builder: ghcr.io/octopilot/builder-jammy-base:latest
     - image: ghcr.io/octopilot/cronjob-log-monitor-chart
-      context: chart
+      context: chart/chartTemplate
       buildpacks:
-        builder: ghcr.io/octopilot/builder-jammy-base:rust-builder-d84dd54
+        builder: ghcr.io/octopilot/builder-jammy-base:latest
     - image: ghcr.io/octopilot/cronjob-log-monitor-integration-cronjob
       context: tests/integration/cronjob-app
       buildpacks:
-        builder: paketobuildpacks/builder-jammy-base
+        builder: ghcr.io/octopilot/builder-jammy-base:latest
         env:
           - BP_JVM_VERSION=21

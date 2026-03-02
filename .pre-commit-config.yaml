@@ -13,7 +13,7 @@ repos:
         args: ['--fix', 'lf']
       - id: check-yaml
         # Helm chart templates use {{ .Values }} etc.; use helm lint instead.
-        exclude: '^chart/templates/'
+        exclude: '^chart/chartTemplate/|^k8s/'
       - id: check-toml
 
   - repo: local
@@ -21,9 +21,9 @@ repos:
       - id: helm-lint
         name: helm lint
         description: Lint Helm chart (use helm lint instead of check-yaml for templates)
-        entry: bash -c 'for d in chart; do [ -f "$d/Chart.yaml" ] && (cd "$d" && helm dependency build . 2>/dev/null; helm lint .); done'
+        entry: bash -c 'for d in chart/chartTemplate; do [ -f "$d/Chart.yaml" ] && (cd "$d" && helm dependency build . 2>/dev/null; helm lint .); done'
         language: system
-        files: '^chart/'
+        files: '^chart/chartTemplate/'
 
       - id: cargo-fmt-check
         name: cargo fmt (check)

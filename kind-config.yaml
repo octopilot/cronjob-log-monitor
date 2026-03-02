@@ -1,0 +1,20 @@
+# Kind cluster config for local e2e with Tilt.
+# Use: just dev-up (creates cluster "kind" and starts registry-tls).
+#
+# The registry runs on the kind network as "registry-tls";
+# host pushes to localhost:5001, nodes pull via certs.d (configured by setup_kind.py).
+kind: Cluster
+apiVersion: kind.x-k8s.io/v1alpha4
+name: kind
+nodes:
+- role: control-plane
+  # Pin to v1.34.x (containerd v1.7.x). Kind v1.35+ has containerd v2 registry config changes.
+  image: kindest/node:v1.34.3
+  kubeadmConfigPatches:
+  - |
+    kind: InitConfiguration
+    nodeRegistration:
+      kubeletExtraArgs:
+        node-labels: "ingress-ready=true"
+# Registry mirror configuration is handled dynamically by scripts/setup_kind.py
+# using the certs.d directory structure (mirror localhost:5001 -> registry-tls:5000, skip_verify).

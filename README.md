@@ -59,6 +59,10 @@ The controller needs:
 
 Create a ServiceAccount, Role/ClusterRole, and RoleBinding granting these in the namespace(s) you watch.
 
+## Local E2E (Tilt)
+
+To run the full pipeline locally (Kind + registry-tls + op build + Flux + Helm chart deploy) and troubleshoot the Helm OCI chart path end-to-end, see **[docs/local-e2e.md](docs/local-e2e.md)**. Prerequisites: kind, kubectl, flux CLI, op (octopilot-pipeline-tools), jq; Docker configured for insecure registry `localhost:5001`. Then: `kind create cluster --name cronjob-log-monitor --config kind-config.yaml` and `tilt up`.
+
 ## Runbook (troubleshooting)
 
 - **Controller not seeing pods** – Ensure the CronJob’s pod template has the label from `MONITOR_LABEL_SELECTOR` (e.g. `monitor-logs=true`). If using regex, check `MONITOR_POD_NAME_REGEX` or `MONITOR_LABEL_REGEX` matches your pod names/labels.

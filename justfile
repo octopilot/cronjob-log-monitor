@@ -5,6 +5,16 @@
 default:
     @just --list
 
+# ── Development (Kind + registry-tls + Tilt) ───────────────────────────────────
+
+# Start dev environment: Kind cluster "kind", registry-tls in Docker, then Tilt.
+dev-up:
+    python3 scripts/dev_up.py
+
+# Stop dev environment: stop Tilt, delete Kind cluster "kind". Registry left running.
+dev-down:
+    python3 scripts/dev_down.py
+
 # ── Code quality ──────────────────────────────────────────────────────────────
 
 # Check formatting only (fails if not formatted; use in CI/pre-commit)

@@ -34,6 +34,9 @@ chart/charts/
 # Skaffold / Docker
 .docker/
 
+# Local dev (just dev-up writes this)
+.registry-port
+
 # Build and debug
 *.exe
 *.dll

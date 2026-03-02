@@ -185,7 +185,8 @@ jobs:
           # Derive OCI URL and digest from chart_ref (oci://host/repo@sha256:...)
           CHART_OCI_URL="$(echo "$CHART_REF" | sed 's|^oci://||' | cut -d'@' -f1)"
           CHART_DIGEST="$(echo "$CHART_REF" | sed 's|^oci://||' | cut -d'@' -f2)"
-          export CHART_OCI_URL CHART_DIGEST
+          CHART_REF_BLOCK="digest: \"${CHART_DIGEST}\""
+          export CHART_OCI_URL CHART_REF_BLOCK
           kubectl apply -f k8s/deployment/namespace.yaml
           envsubst < k8s/deployment/ocirepository.yaml | kubectl apply -f -
           envsubst < k8s/deployment/helmrelease.yaml | kubectl apply -f -
