@@ -92,6 +92,7 @@ jobs:
         with:
           artifact: ${{ toJson(matrix) }}
           ttl-uuid: ${{ needs.integration-validate.outputs.uuid }}
+          op_version: v1.0.14
 
       - name: Upload artifact outputs
         run: |
