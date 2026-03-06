@@ -137,12 +137,17 @@ jobs:
           IMAGE_MONITOR="$(jq -r '.builds[] | select(.imageName | test("cronjob-log-monitor$")) | .tag' build_result.json 2>/dev/null | head -1)"
           IMAGE_CHART="$(jq -r '.builds[] | select(.imageName | test("-chart$")) | .tag' build_result.json 2>/dev/null | head -1)"
           IMAGE_CRONJOB="$(jq -r '.builds[] | select(.imageName | test("integration-cronjob$")) | .tag' build_result.json 2>/dev/null | head -1)"
-          # Chart ref must be Helm OCI shape: registry/repo/chartname:version[@digest]. Fail early if malformed.
+          # Chart ref must be Helm OCI shape: registry/repo/chartname:version[@digest]. Normalize image-style ref if needed.
           CHART_NAME="$(grep -E '^name:' chart/chartTemplate/Chart.yaml 2>/dev/null | sed 's/^name:[[:space:]]*//;s/[[:space:]]*$//' || echo "cronjob-log-monitor-chart")"
           if ! echo "$IMAGE_CHART" | grep -qE "/${CHART_NAME}:"; then
-            echo "::error::Chart ref missing chart name segment: expected .../${CHART_NAME}:version[@digest], got: ${IMAGE_CHART}"
-            echo "Build pipeline may have written an image-style ref; check op build.go readChartRef and helm buildpack ref output."
-            exit 1
+            # Build may emit image-style ref (ttl.sh/uuid-chart:0.1.0@sha256:...); insert /chartname before :version.
+            if echo "$IMAGE_CHART" | grep -qE '-chart:[^@]+'; then
+              IMAGE_CHART="$(echo "$IMAGE_CHART" | sed "s|-chart:|-chart/${CHART_NAME}:|")"
+              echo "Normalized chart ref to Helm OCI form: ${IMAGE_CHART}"
+            else
+              echo "::error::Chart ref missing chart name segment: expected .../${CHART_NAME}:version[@digest], got: ${IMAGE_CHART}"
+              exit 1
+            fi
           fi
           # OCI chart: use digest-only ref (oci://host/repo/chart@sha256:...) so Helm does not list tags (ttl.sh does not support tag listing).
           if echo "$IMAGE_CHART" | grep -q '@sha256:'; then
