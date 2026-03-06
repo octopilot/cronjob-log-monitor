@@ -141,7 +141,7 @@ jobs:
           CHART_NAME="$(grep -E '^name:' chart/chartTemplate/Chart.yaml 2>/dev/null | sed 's/^name:[[:space:]]*//;s/[[:space:]]*$//' || echo "cronjob-log-monitor-chart")"
           if ! echo "$IMAGE_CHART" | grep -qE "/${CHART_NAME}:"; then
             # Build may emit image-style ref (ttl.sh/uuid-chart:0.1.0@sha256:...); insert /chartname before :version.
-            if echo "$IMAGE_CHART" | grep -qE '-chart:[^@]+'; then
+            if echo "$IMAGE_CHART" | grep -qE -- '-chart:[^@]+'; then
               IMAGE_CHART="$(echo "$IMAGE_CHART" | sed "s|-chart:|-chart/${CHART_NAME}:|")"
               echo "Normalized chart ref to Helm OCI form: ${IMAGE_CHART}"
             else
