@@ -65,7 +65,7 @@ def main():
         env["REGISTRY_PORT"] = "5001"
 
     log_info("Starting Tilt...")
-    subprocess.run(["tilt", "up"], env=env, check=False)
+    subprocess.run(["tilt", "up", "--host", "0.0.0.0"], env=env, check=False)
 
 
 if __name__ == "__main__":
