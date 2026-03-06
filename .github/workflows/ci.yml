@@ -74,20 +74,13 @@ jobs:
 
   # ── 4b. Integration artifacts (matrix from skaffold + chart_paths) ──────────
   # Matrix is derived from detect: skaffold build.artifacts (docker if Dockerfile in context, else pack) and chart_paths.
-  # DinD service provides a Docker daemon for op (chart builds run the helm buildpack in a builder container via Docker API).
+  # Use the runner's Docker socket (ubuntu-latest has Docker). DinD causes "connection reset by peer" when Pack/op
+  # use DOCKER_HOST to talk to DinD; the host daemon is reliable for both Pack (image) and chart builds.
   integration-artifacts:
     name: Integration (${{ matrix.suffix || matrix.output_key }})
     needs: [detect, integration-validate]
     if: toJSON(fromJson(needs.detect.outputs.pipeline-context).integration_matrix) != '[]'
     runs-on: ubuntu-latest
-    services:
-      dind:
-        image: docker:dind
-        options: --privileged
-        env:
-          DOCKER_TLS_CERTDIR: ''
-        ports:
-          - 2375:2375
     strategy:
       fail-fast: false
       matrix:
@@ -102,7 +95,6 @@ jobs:
           artifact: ${{ toJson(matrix) }}
           ttl-uuid: ${{ needs.integration-validate.outputs.uuid }}
           op_version: v1.0.16
-          docker_host: tcp://host.docker.internal:2375
 
       - name: Upload artifact outputs
         run: |
