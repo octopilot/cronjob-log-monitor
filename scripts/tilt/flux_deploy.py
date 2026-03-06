@@ -84,11 +84,13 @@ def main():
         if available and chart_tag not in available and "latest" in available:
             chart_tag = "latest"
             print(f"Chart tag 0.1.0 not in registry; using tag 'latest' (available: {available})", file=sys.stderr)
-    # REF_BLOCK: use digest when present (from buildpack helm push), else tag
+    # Ref type/value for OCIRepository (digest or tag)
     if chart_digest and chart_digest.startswith("sha256:"):
-        ref_block = f'digest: "{chart_digest}"'
+        chart_ref_type = "digest"
+        chart_ref_value = chart_digest
     else:
-        ref_block = f'tag: "{chart_tag}"'
+        chart_ref_type = "tag"
+        chart_ref_value = chart_tag
     # e.g. localhost:5001/ghcr.io/.../cronjob-log-monitor:latest@sha256:... -> ghcr.io/.../cronjob-log-monitor@sha256:...
     monitor_path = re.sub(r"^[^/]+/", "", image_monitor)
     monitor_path = re.sub(r":[^@]+@", "@", monitor_path)
@@ -97,31 +99,28 @@ def main():
 
     env = os.environ.copy()
     env["CHART_OCI_URL"] = chart_oci_url
-    env["CHART_REF_BLOCK"] = ref_block
+    env["CHART_REF_TYPE"] = chart_ref_type
+    env["CHART_REF_VALUE"] = chart_ref_value
     env["MONITOR_IMAGE"] = monitor_image_ref
 
-    def envsubst(path: Path, vars_: list[str]) -> str:
-        text = path.read_text()
+    def substitute_vars(text: str, vars_: list[str]) -> str:
         for key in vars_:
             value = env.get(key, "")
             text = text.replace("${" + key + "}", value)
         return text
 
-    k8s = project_root / "k8s" / "deployment"
+    # Kind overlay: local registry, insecure: true (patched in k8s/env/kind)
     r = subprocess.run(
-        ["kubectl", "apply", "-f", str(k8s / "namespace.yaml")],
+        ["kubectl", "kustomize", str(project_root / "k8s" / "env" / "kind")],
         cwd=project_root,
+        capture_output=True,
+        text=True,
     )
     if r.returncode != 0:
+        print(r.stderr, file=sys.stderr)
         sys.exit(r.returncode)
-    oci_yaml = envsubst(k8s / "ocirepository.yaml", ["CHART_OCI_URL", "CHART_REF_BLOCK"])
-    r = subprocess.run(["kubectl", "apply", "-f", "-"], input=oci_yaml, text=True, cwd=project_root)
-    if r.returncode != 0:
-        sys.stdout.flush()
-        sys.stderr.flush()
-        sys.exit(r.returncode)
-    hr_yaml = envsubst(k8s / "helmrelease.yaml", ["MONITOR_IMAGE"])
-    r = subprocess.run(["kubectl", "apply", "-f", "-"], input=hr_yaml, text=True, cwd=project_root)
+    manifest = substitute_vars(r.stdout, ["CHART_OCI_URL", "CHART_REF_TYPE", "CHART_REF_VALUE", "MONITOR_IMAGE"])
+    r = subprocess.run(["kubectl", "apply", "-f", "-"], input=manifest, text=True, cwd=project_root)
     if r.returncode != 0:
         sys.stdout.flush()
         sys.stderr.flush()

@@ -47,7 +47,7 @@ local_resource(
 local_resource(
     'flux-deploy',
     cmd='python3 scripts/tilt/flux_deploy.py',
-    deps=['k8s/deployment/namespace.yaml', 'k8s/deployment/ocirepository.yaml', 'k8s/deployment/helmrelease.yaml', 'scripts/tilt/flux_deploy.py'],
+    deps=['k8s/deployment', 'k8s/env/kind', 'scripts/tilt/flux_deploy.py'],
     labels=['deploy'],
     resource_deps=['op-build', 'flux-install'],
 )

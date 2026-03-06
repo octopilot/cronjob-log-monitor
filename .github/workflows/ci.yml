@@ -137,8 +137,14 @@ jobs:
           IMAGE_MONITOR="$(jq -r '.builds[] | select(.imageName | test("cronjob-log-monitor$")) | .tag' build_result.json 2>/dev/null | head -1)"
           IMAGE_CHART="$(jq -r '.builds[] | select(.imageName | test("-chart$")) | .tag' build_result.json 2>/dev/null | head -1)"
           IMAGE_CRONJOB="$(jq -r '.builds[] | select(.imageName | test("integration-cronjob$")) | .tag' build_result.json 2>/dev/null | head -1)"
-          # OCI chart: use digest-only ref (oci://host/repo@sha256:...) so Helm does not list tags (ttl.sh does not support tag listing).
-          # Standard Helm pattern is: helm install NAME --version X.Y.Z oci://host/repo/chart (version from Chart.yaml); that would require propagating chart version through pipeline-context.
+          # Chart ref must be Helm OCI shape: registry/repo/chartname:version[@digest]. Fail early if malformed.
+          CHART_NAME="$(grep -E '^name:' chart/chartTemplate/Chart.yaml 2>/dev/null | sed 's/^name:[[:space:]]*//;s/[[:space:]]*$//' || echo "cronjob-log-monitor-chart")"
+          if ! echo "$IMAGE_CHART" | grep -qE "/${CHART_NAME}:"; then
+            echo "::error::Chart ref missing chart name segment: expected .../${CHART_NAME}:version[@digest], got: ${IMAGE_CHART}"
+            echo "Build pipeline may have written an image-style ref; check op build.go readChartRef and helm buildpack ref output."
+            exit 1
+          fi
+          # OCI chart: use digest-only ref (oci://host/repo/chart@sha256:...) so Helm does not list tags (ttl.sh does not support tag listing).
           if echo "$IMAGE_CHART" | grep -q '@sha256:'; then
             CHART_REF="oci://$(echo "$IMAGE_CHART" | sed 's/:[^@]*@/@/')"
           else
@@ -188,11 +194,10 @@ jobs:
           # Derive OCI URL and digest from chart_ref (oci://host/repo@sha256:...)
           CHART_OCI_URL="$(echo "$CHART_REF" | sed 's|^oci://||' | cut -d'@' -f1)"
           CHART_DIGEST="$(echo "$CHART_REF" | sed 's|^oci://||' | cut -d'@' -f2)"
-          CHART_REF_BLOCK="digest: \"${CHART_DIGEST}\""
-          export CHART_OCI_URL CHART_REF_BLOCK
-          kubectl apply -f k8s/deployment/namespace.yaml
-          envsubst < k8s/deployment/ocirepository.yaml | kubectl apply -f -
-          envsubst < k8s/deployment/helmrelease.yaml | kubectl apply -f -
+          CHART_REF_TYPE=digest
+          CHART_REF_VALUE="$CHART_DIGEST"
+          export CHART_OCI_URL CHART_REF_TYPE CHART_REF_VALUE MONITOR_IMAGE
+          kubectl kustomize k8s/env/ci | envsubst | kubectl apply -f -
           flux reconcile source oci cronjob-log-monitor-chart -n cronjob-log-monitor --timeout=2m || RECONCILE_FAILED=1
           flux reconcile helmrelease cronjob-log-monitor -n cronjob-log-monitor --timeout=3m || RECONCILE_FAILED=1
           kubectl get all -n cronjob-log-monitor

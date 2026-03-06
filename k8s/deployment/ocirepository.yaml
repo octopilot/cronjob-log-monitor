@@ -1,6 +1,5 @@
-# OCI chart source for cronjob-log-monitor. CHART_OCI_URL and ref are substituted by CI/Tilt.
-# CI: CHART_OCI_URL + CHART_DIGEST from build_result.json.
-# Tilt: flux_deploy.py sets CHART_OCI_URL=registry-tls:5000/... and CHART_REF_BLOCK (digest or tag).
+# OCI chart source for cronjob-log-monitor. Substituted by CI/Tilt: CHART_OCI_URL, CHART_REF_TYPE (digest|tag), CHART_REF_VALUE.
+# Env overlays patch spec.insecure: k8s/env/ci (false, ttl.sh/GHCR), k8s/env/kind (true, local registry).
 apiVersion: source.toolkit.fluxcd.io/v1
 kind: OCIRepository
 metadata:
@@ -10,6 +9,6 @@ spec:
   interval: 5m
   url: oci://${CHART_OCI_URL}
   ref:
-    ${CHART_REF_BLOCK}
-  # Allow HTTP for local registry (registry-tls:5000). Omit or set false for CI (ttl.sh/GHCR use HTTPS).
-  insecure: true
+    ${CHART_REF_TYPE}: "${CHART_REF_VALUE}"
+  # Patched per env: ci (ttl.sh/GHCR) -> false, kind (local registry) -> true
+  insecure: false
